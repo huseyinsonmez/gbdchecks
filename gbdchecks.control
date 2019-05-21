@@ -1,0 +1,3 @@
+comment = 'GBD tarafindan kullanılan sorgular'
+default_version = '1.0'
+relocatable = no
