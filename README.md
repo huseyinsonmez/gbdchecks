@@ -1,4 +1,4 @@
-# gbdpaket
+# gbdchecks
 
 
 # KONTROL SORGULARI
