@@ -1,3 +1,7 @@
-comment = 'GBD tarafindan kullanılan sorgular'
-default_version = '1.0'
-relocatable = no
+# gbdchecks extension
+comment = 'GBD tarafindan kullanilan fonkisyon ve viewlarin eklentiye donusturulmus hali'
+default_version = '1.1'
+schema = 'gbdchecks'
+requires = 'pg_stat_statements'
+relocatable = false
+superuser = true

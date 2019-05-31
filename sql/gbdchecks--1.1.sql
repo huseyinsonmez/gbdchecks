@@ -1,15 +1,27 @@
---- ÖN HAZIRLIK
-CREATE SCHEMA gbd;
-REVOKE ALL ON SCHEMA gbd FROM PUBLIC;
-REVOKE ALL ON ALL FUNCTIONS IN SCHEMA gbd FROM PUBLIC;
-GRANT ALL ON SCHEMA gbd TO postgres;
-GRANT ALL ON ALL FUNCTIONS IN SCHEMA gbd TO postgres;
+/**
+*
+* Bu dosyanın "CREATE EXTENSION" dışında kullanılmasını engeller.
+* Düzen ve güvenilirlik açısından "CREATE EXTENSION" ile kullanmak daha yararlıdır
+***/
+
+\echo Bu dosyayi kullanmak icin lutfen "CREATE EXTENSION gbdchecks;" komutunu kullanin. \quit
+
+---- KONTROL SORGULARI ----
+
+-- En yavaş sorguları görüntülememizi sağlayan view (pg_stat_statements gerektirir)
+CREATE OR REPLACE VIEW check_queries AS
+SELECT
+    substring(query, 1, 50) AS short_query,
+    round(total_time::numeric, 2) AS total_time,
+    calls,
+    round(mean_time::numeric, 2) AS mean,
+    round((100 * total_time / sum(total_time::numeric) OVER ())::numeric, 2) AS percentage_cpu
+FROM pg_stat_statements
+ORDER BY total_time DESC LIMIT 20;
 
 
---- KONTROL SORGULARI
-
---- Sunucudaki bloat oranlarını görüntülemek için gerekli olan fonksiyon
-CREATE OR REPLACE VIEW gbd.check_bloat AS WITH constants AS (
+-- Sunucudaki bloat oranlarını görüntülemek için görüntülememizi olan view
+CREATE OR REPLACE VIEW check_bloat AS WITH constants AS (
     SELECT current_setting('block_size')::numeric AS bs, 23 AS hdr, 4 AS ma), bloat_info AS (
       SELECT ma, bs, schemaname, tablename, (datawidth + (hdr + ma - (
         CASE WHEN hdr % ma = 0 THEN ma ELSE hdr % ma END)))::numeric AS datahdr, (maxfracsum * (nullhdr + ma - (
@@ -34,8 +46,8 @@ CREATE OR REPLACE VIEW gbd.check_bloat AS WITH constants AS (
                         CASE WHEN ipages < iotta THEN '0' ELSE (bs * (ipages - iotta))::bigint END AS raw_waste FROM index_bloat) bloat_summary ORDER BY raw_waste DESC, bloat DESC;
 
 
---- Engellenen sorguları görüntülemek için gerekli olan fonksiyon
-CREATE OR REPLACE VIEW gbd.check_blocked_statements AS
+-- Engellenen sorguları görüntülememizi saglayan view
+CREATE OR REPLACE VIEW check_blocked_statements AS
 SELECT
     bl.pid AS blocked_pid,
     ka.query AS blocking_statement,
@@ -50,8 +62,8 @@ SELECT
     AND bl.pid != kl.pid WHERE NOT bl.granted;
 
 
---- Hit Ratio değerlerini görümtülemek için gerekli olan fonksiyon
-CREATE OR REPLACE VIEW gbd.check_hit_ratio AS
+-- Hit Ratio değerlerini görütülememizi sağlayan view
+CREATE OR REPLACE VIEW check_hit_ratio AS
 SELECT
     sum(heap_blks_read) AS heap_read,
     sum(heap_blks_hit) AS heap_hit,
@@ -59,8 +71,8 @@ SELECT
 FROM pg_statio_user_tables;
 
 
---- Index boyutlarını görümtülemek için gerekli olan fonksiyon
-CREATE OR REPLACE VIEW gbd.check_index_size AS
+-- Index boyutlarını görüntülememizi saglayan view
+CREATE OR REPLACE VIEW check_index_sizes AS
 SELECT
     c.relname AS name,
     pg_size_pretty(sum(c.relpages::bigint * 8192)::bigint) AS size
@@ -70,8 +82,8 @@ FROM pg_class c
     GROUP BY c.relname ORDER BY sum(c.relpages) DESC;
 
 
---- Index kullanımını görümtülemek için gerekli olan fonksiyon
-CREATE OR REPLACE VIEW gbd.check_index_usage AS
+-- Index kullanımını görüntülememizi saglayan view
+CREATE OR REPLACE VIEW check_index_usage AS
 SELECT
     relname,
     CASE idx_scan
@@ -80,37 +92,23 @@ SELECT
     FROM pg_stat_user_tables ORDER BY n_live_tup DESC;
 
 
---- Lockları görümtülemek için gerekli olan fonksiyon
-CREATE OR REPLACE VIEW gbd.check_locks AS
+-- Lockları görüntülememizi saglayan view
+CREATE OR REPLACE VIEW check_locks AS
 SELECT t.relname, l.locktype, page, virtualtransaction, pid, mode, granted
 FROM pg_locks l, pg_stat_all_tables t
 WHERE l.relation = t.relid
 ORDER BY relation asc;
 
 
---- En yavaş sorguları görümtülemek için gerekli olan fonksiyon (pg_stat_statements eklentisi olmadan hata alır)
-CREATE OR REPLACE VIEW gbd.check_queries AS
-SELECT
-    substring(query, 1, 50) AS short_query,
-    round(total_time::numeric, 2) AS total_time,
-    calls,
-    round(mean_time::numeric, 2) AS mean,
-    round((100 * total_time / sum(total_time::numeric)
-            OVER ())::numeric,
-        2) AS percentage_cpu
-FROM pg_stat_statements
-ORDER BY total_time DESC LIMIT 20;
-
-
---- Sequential Scan değerlerini görümtülemek için gerekli olan fonksiyon
-CREATE OR REPLACE VIEW gbd.check_seq_scans AS
+-- Sequential Scan değerlerini görüntülememizi saglayan view
+CREATE OR REPLACE VIEW check_seq_scans AS
 SELECT relname AS name, seq_scan AS count
 FROM pg_stat_user_tables
 ORDER BY seq_scan DESC;
 
 
---- Kullanılmayan indexleri görümtülemek için gerekli olan fonksiyon
-CREATE OR REPLACE VIEW gbd.check_unused_indexes
+-- Kullanılmayan indexleri görüntülememizi saglayan view
+CREATE OR REPLACE VIEW check_unused_indexes
 AS
 SELECT
     schemaname || '.' || relname AS table,
@@ -121,8 +119,8 @@ WHERE NOT indisunique AND idx_scan < 50 AND pg_relation_size(relid) > 5 * 8192
 ORDER BY pg_relation_size(i.indexrelid) / nullif (idx_scan, 0) DESC NULLS FIRST, pg_relation_size(i.indexrelid) DESC;
 
 
---- Vacuum istatistiklerini görümtülemek için gerekli olan fonksiyon
-CREATE OR REPLACE VIEW gbd.check_vacuum_stats AS WITH table_opts AS (
+-- Vacuum istatistiklerini görüntülememizi saglayan view
+CREATE OR REPLACE VIEW check_vacuum_stats AS WITH table_opts AS (
     SELECT pg_class.oid, relname, nspname, array_to_string(reloptions, '') AS relopts
     FROM pg_class
     INNER JOIN pg_namespace ns ON relnamespace = ns.oid), vacuum_settings AS (
@@ -148,10 +146,10 @@ SELECT
     ORDER BY 1;
 
 
---- YETKI KONTROL SORGULARI
+---- YETKI KONTROL SORGULARI ----
 
---- Bir kullanıcının tablo yetkilerini görüntülemek için gerekli fonksiyon
-CREATE OR REPLACE FUNCTION gbd.table_privs(text) RETURNS table(username text, relname regclass, privileges text[])
+-- Bir kullanıcının tablo yetkilerini görüntülememizi sağlayan fonksiyon
+CREATE OR REPLACE FUNCTION table_privs(text) RETURNS table(username text, relname regclass, privileges text[])
 AS
 $$
   SELECT  $1,c.oid::regclass, array(select privs from unnest(ARRAY [
@@ -166,8 +164,8 @@ has_table_privilege($1,c.oid,'SELECT, INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,T
 $$ LANGUAGE SQL;
 
 
---- Bir kullanıcının Veritabanı yetkilerini görütülemek için gerekli fonksiyon
-CREATE OR REPLACE FUNCTION gbd.database_privs(text) RETURNS table(username text, dbname name, privileges text[])
+-- Bir kullanıcının veritabanı yetkilerini görüntülememizi sağlayan fonksiyon
+CREATE OR REPLACE FUNCTION database_privs(text) RETURNS table(username text, dbname name, privileges text[])
 AS
 $$
   SELECT $1, datname, array(select privs from unnest(ARRAY[
@@ -179,8 +177,8 @@ has_database_privilege($1,c.oid,'CONNECT,CREATE,TEMPORARY,TEMP') AND datname not
 $$ LANGUAGE SQL;
 
 
---- Bir kullanıcının Tablespace yetkilerini görütülemek için gerekli fonksiyon
-CREATE OR REPLACE FUNCTION gbd.tablespace_privs(text) RETURNS table(username text, spcname name, privileges text[])
+-- Bir kullanıcının tablespace yetkilerini görüntülememizi sağlayan fonksiyon
+CREATE OR REPLACE FUNCTION tablespace_privs(text) RETURNS table(username text, spcname name, privileges text[])
 AS
 $$
   SELECT $1, spcname, ARRAY[
@@ -188,8 +186,8 @@ $$
 $$ LANGUAGE SQL;
 
 
---- Bir kullanıcının Foreign Data Wrapper yetkilerini görütülemek için gerekli fonksiyon
-CREATE OR REPLACE FUNCTION gbd.fdw_privs(text) RETURNS table(username text,fdwname name, privileges text[])
+-- Bir kullanıcının foreign data wrapper yetkilerini görüntülememizi sağlayan fonksiyon
+CREATE OR REPLACE FUNCTION fdw_privs(text) RETURNS table(username text,fdwname name, privileges text[])
 AS
 $$
   SELECT $1, fdwname, ARRAY[
@@ -197,8 +195,8 @@ $$
 $$ LANGUAGE SQL;
 
 
---- Bir kullanıcının Foreign Server yetkilerini görüntülemek için gerekli fonksiyon
-CREATE OR REPLACE FUNCTION gbd.fsrv_privs(text) RETURNS table(username text, fsrvname name, privileges text[])
+-- Bir kullanıcının foreign server yetkilerini görüntülememizi sağlayan fonksiyon
+CREATE OR REPLACE FUNCTION fsrv_privs(text) RETURNS table(username text, fsrvname name, privileges text[])
 AS
 $$
   SELECT $1, s.srvname ,  ARRAY[
@@ -206,16 +204,16 @@ $$
 $$ LANGUAGE SQL;
 
 
---- Bir kullanıcının Language yetkileri için gerekli fonksiyon
-CREATE OR REPLACE FUNCTION gbd.language_privs(text) RETURNS table(username text,langname name, privileges text[])
+-- Bir kullanıcının language yetkilerini görüntülememizi sağlayan fonksiyon
+CREATE OR REPLACE FUNCTION language_privs(text) RETURNS table(username text,langname name, privileges text[])
 AS
 $$
 SELECT $1, l.lanname, ARRAY[(CASE WHEN has_language_privilege($1,lanname,'USAGE') THEN 'USAGE' ELSE NULL END)] FROM pg_catalog.pg_language l where has_language_privilege($1,lanname,'USAGE');
 $$ LANGUAGE SQL;
 
 
---- Bir kullanıcının Schema yetkileri için gerekli fonksiyon
-CREATE OR REPLACE FUNCTION gbd.schema_privs(text) RETURNS table(username text, schemaname name, privileges text[])
+-- Bir kullanıcının schema yetkilerini görüntülememizi sağlayan fonksiyon
+CREATE OR REPLACE FUNCTION schema_privs(text) RETURNS table(username text, schemaname name, privileges text[])
 AS
 $$
   SELECT $1, c.nspname, array(select privs from unnest(ARRAY[
@@ -225,8 +223,8 @@ FROM pg_namespace c where has_schema_privilege($1,c.oid,'CREATE,USAGE');
 $$ LANGUAGE SQL;
 
 
---- Bir kullanıcının View yetkilerini görüntülemek için gerekli fonksiyon
-CREATE OR REPLACE FUNCTION gbd.view_privs(text) returns table(username text, viewname regclass, privileges text[])
+-- Bir kullanıcının view yetkilerini görüntülememizi sağlayan fonksiyon
+CREATE OR REPLACE FUNCTION view_privs(text) returns table(username text, viewname regclass, privileges text[])
 AS
 $$
 SELECT  $1, c.oid::regclass, array(SELECT privs FROM unnest(ARRAY [
@@ -240,8 +238,8 @@ SELECT  $1, c.oid::regclass, array(SELECT privs FROM unnest(ARRAY [
 $$ LANGUAGE SQL;
 
 
---- Bir kullanıcının Sequence yetkilerini görüntülemek için gerekli fonksiyon
-CREATE OR REPLACE FUNCTION gbd.sequence_privs(text) RETURNS table(username text, seqname regclass, privileges text[])
+-- Bir kullanıcının sequence yetkilerini görüntülememizi sağlayan fonksiyon
+CREATE OR REPLACE FUNCTION sequence_privs(text) RETURNS table(username text, seqname regclass, privileges text[])
 AS
 $$
   SELECT $1, c.oid::regclass, array(SELECT privs from unnest(ARRAY [
@@ -251,36 +249,68 @@ has_table_privilege($1,c.oid,'SELECT,UPDATE')  AND has_schema_privilege($1,c.rel
 $$ LANGUAGE SQL;
 
 
---- Bir kullanıcının tüm yetkileri görütülemek için gerekli fonksiyon
-CREATE OR REPLACE FUNCTION gbd.all_privs(text) RETURNS table(usename text, object_type text, object_name name, privileges text[])
+-- Bir kullanıcının tüm yetkilerini görüntülememizi sağlayan fonksiyon
+CREATE OR REPLACE FUNCTION all_privs(text) RETURNS table(usename text, object_type text, object_name name, privileges text[])
 AS
 $$
 SELECT * FROM (
 SELECT username,'TABLE' as object_type, relname::name as object_name, privileges
-    FROM gbd.table_privs($1)
+    FROM @extschema@.table_privs($1)
  UNION ALL
 SELECT username,'DATABASE' as object_type, dbname as object_name, privileges
- FROM gbd.database_privs($1)
+ FROM @extschema@.database_privs($1)
  UNION ALL
 SELECT username,'TABLESPACE' as object_type, spcname as object_name, privileges
- FROM gbd.tablespace_privs($1)
+ FROM @extschema@.tablespace_privs($1)
  UNION ALL
 SELECT username,'FWD' as object_type, fdwname as object_name, privileges
- FROM gbd.fdw_privs($1)
+ FROM @extschema@.fdw_privs($1)
  UNION ALL
 SELECT username,'FSERVER' as object_type, fsrvname as object_name, privileges
- FROM gbd.fsrv_privs($1)
+ FROM @extschema@.fsrv_privs($1)
  UNION ALL
 SELECT username,'LANGUAGE' as object_type, langname as object_name, privileges
- FROM gbd.language_privs($1)
+ FROM @extschema@.language_privs($1)
  UNION ALL
 SELECT username,'SCHEMA' as object_type, schemaname as object_name, privileges
- FROM gbd.schema_privs($1)
+ FROM @extschema@.schema_privs($1)
  UNION ALL
 SELECT username,'VIEW' as object_type, viewname::name as object_name, privileges
- FROM gbd.view_privs($1)
+ FROM @extschema@.view_privs($1)
  UNION ALL
 SELECT username,'SEQ' as object_type, seqname::name as object_name, privileges
- FROM gbd.sequence_privs($1)
+ FROM @extschema@.sequence_privs($1)
 ) AS text1 ORDER BY 2
 $$ LANGUAGE SQL;
+
+
+---- OLUŞTURULAN OBJELER İÇİN YORUMLAR ----
+COMMENT ON SCHEMA @extschema@ IS 'GBD tarafindan kullanilan fonksiyon ve viewlarin bulundugu schema';
+COMMENT ON VIEW check_queries IS 'En yavas sorgulari goruntulememizi saglayan view';
+COMMENT ON VIEW check_bloat IS 'Sunucudaki bloat oranlarini goruntulememizi saglayan view';
+COMMENT ON VIEW check_blocked_statements IS 'Engellenen sorgulari goruntulememizi saglayan view';
+COMMENT ON VIEW check_hit_ratio IS 'Hit ratio degerlerini goruntulememizi saglayan view';
+COMMENT ON VIEW check_index_sizes IS 'Index boyutlarini goruntulememizi saglayan view';
+COMMENT ON VIEW check_index_usage IS 'Index kullanimini goruntulememizi saglayan view';
+COMMENT ON VIEW check_locks IS 'Locklari goruntulememizi saglayan view';
+COMMENT ON VIEW check_seq_scans IS 'Sequential Scan degerlerini goruntulememizi saglayan view';
+COMMENT ON VIEW check_unused_indexes IS 'Kullanilmayan indexleri goruntulememizi saglayan view';
+COMMENT ON VIEW check_vacuum_stats IS 'Vacuum istatistiklerini goruntulememizi saglayan view';
+COMMENT ON FUNCTION table_privs IS 'Bir kullanıcının tablo yetkilerini goruntulememizi saglayan fonksiyon';
+COMMENT ON FUNCTION database_privs IS 'Bir kullanıcının veritabani yetkilerini goruntulememizi saglayan fonksiyon';
+COMMENT ON FUNCTION tablespace_privs IS 'Bir kullanıcının tablespace yetkilerini goruntulememizi saglayan fonksiyon';
+COMMENT ON FUNCTION fdw_privs IS 'Bir kullanıcının foreign data wrapper yetkilerini goruntulememizi saglayan fonksiyon';
+COMMENT ON FUNCTION fsrv_privs IS 'Bir kullanıcının foreign server yetkilerini goruntulememizi saglayan fonksiyon';
+COMMENT ON FUNCTION language_privs IS 'Bir kullanıcının language yetkilerini goruntulememizi saglayan fonksiyon';
+COMMENT ON FUNCTION schema_privs IS 'Bir kullanıcının schema yetkilerini goruntulememizi saglayan fonksiyon';
+COMMENT ON FUNCTION view_privs IS 'Bir kullanıcının view yetkilerini goruntulememizi saglayan fonksiyon';
+COMMENT ON FUNCTION sequence_privs IS 'Bir kullanıcının sequence yetkilerini goruntulememizi saglayan fonksiyon';
+COMMENT ON FUNCTION all_privs IS 'Bir kullanıcının tüm yetkilerini goruntulememizi saglayan fonksiyon';
+
+---- OLUŞTURULAN OBJELER İÇİN YETKİ KISITLAMALARI ----
+REVOKE ALL ON SCHEMA @extschema@ FROM PUBLIC;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA @extschema@ FROM PUBLIC;
+REVOKE ALL ON ALL TABLES IN SCHEMA @extschema@ FROM PUBLIC;
+GRANT USAGE ON SCHEMA @extschema@ TO CURRENT_USER;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA @extschema@ TO CURRENT_USER;
+GRANT SELECT ON ALL TABLES IN SCHEMA @extschema@ TO CURRENT_USER;
